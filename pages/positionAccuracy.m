@@ -336,7 +336,7 @@ function positionAccuracy()
             lblRMSE.Text = sprintf('RMSE: %.4f m', rmseVal);
 
             % --- Plot results ---
-            cla(ax);
+            delete(allchild(ax));
             hold(ax, 'on');
 
             % Anchors
@@ -439,6 +439,15 @@ function positionAccuracy()
             xlabel(ax, 'X (meters)');
             ylabel(ax, 'Y (meters)');
             grid(ax, 'on');
+
+            % Set axis limits based on anchors and targets (avoids hyperbola infinities)
+            allX = [anchorpos(1,:), tgtposAll(1,:), tgtposEstAll(1,:)];
+            allY = [anchorpos(2,:), tgtposAll(2,:), tgtposEstAll(2,:)];
+            pad = max([max(allX)-min(allX), max(allY)-min(allY)]) * 0.3;
+            pad = max(pad, 5);
+            xlim(ax, [min(allX) - pad, max(allX) + pad]);
+            ylim(ax, [min(allY) - pad, max(allY) + pad]);
+
             hold(ax, 'off');
 
             lblStatus.Text = sprintf('Done. %s/%s — %d anchors, %d target(s).', ...
@@ -469,7 +478,7 @@ end
 
 function [x, y] = get2DHyperbolicSurface(anchorRefPos, anchorPos, rngDiffEst)
 % Get 2D hyperbolic surface for a given pair of anchors
-theta = linspace(-pi/2, pi/2, 100);
+theta = linspace(-pi/2 * 0.98, pi/2 * 0.98, 300);
 phi = 0;
 [Theta, Phi] = meshgrid(theta, phi);
 
