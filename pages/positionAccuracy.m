@@ -336,7 +336,7 @@ function positionAccuracy()
             lblRMSE.Text = sprintf('RMSE: %.4f m', rmseVal);
 
             % --- Plot results ---
-            delete(allchild(ax));
+            cla(ax);
             hold(ax, 'on');
 
             % Anchors
