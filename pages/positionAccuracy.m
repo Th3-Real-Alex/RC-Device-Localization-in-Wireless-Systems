@@ -1,6 +1,4 @@
 function positionAccuracy()
-    close all;
-    
     pageContainer = uifigure('Name', 'Device Localization in Wireless Systems - Position Accuracy', ...
         'NumberTitle', 'off', ...
         'Resize', 'off', ...
@@ -133,13 +131,22 @@ function positionAccuracy()
         'Value', '8', ...
         'Position', [leftPad yPos ctrlWidth ctrlHeight]);
 
-    % --- Show Curves Toggle ---
+    % --- Show Target Curves ---
     yPos = yPos - rowSpacing;
-    chkShowCurves = uicheckbox(controlPanel, ...
-        'Text', 'Show Trilateration Curves', ...
-        'Value', true, ...
-        'Position', [leftPad yPos ctrlWidth ctrlHeight], ...
-        'ValueChangedFcn', @(~,~) toggleCurves());
+    uilabel(controlPanel, 'Text', 'Curves:', ...
+        'Position', [leftPad yPos 55 ctrlHeight], ...
+        'FontWeight', 'bold');
+    chkTargets = gobjects(1, 5);
+    chkW = 45;
+    for k = 1:5
+        kk = k;
+        chkTargets(k) = uicheckbox(controlPanel, ...
+            'Text', sprintf('T%d', k), ...
+            'Value', true, ...
+            'Visible', 'off', ...
+            'Position', [leftPad + 55 + (k-1)*chkW, yPos, chkW, ctrlHeight], ...
+            'ValueChangedFcn', @(~,~) toggleTarget(kk));
+    end
 
     % --- Run Button ---
     yPos = yPos - rowSpacing - 5;
@@ -342,32 +349,33 @@ function positionAccuracy()
             % True target positions, estimated positions, connecting lines, labels
             for k = 1:numTargets
                 tgtColor = tgtColors(k, :);
+                tgtTag = sprintf('Target%d', k);
                 if k == 1
                     plot(ax, tgtposAll(1,k), tgtposAll(2,k), 'x', ...
                         'Color', tgtColor, 'LineWidth', 2, 'MarkerSize', 12, ...
-                        'DisplayName', 'True Positions');
+                        'Tag', tgtTag, 'DisplayName', 'True Positions');
                     plot(ax, tgtposEstAll(1,k), tgtposEstAll(2,k), 'o', ...
                         'Color', tgtColor, 'LineWidth', 2, 'MarkerSize', 12, ...
-                        'DisplayName', 'Estimated Positions');
+                        'Tag', tgtTag, 'DisplayName', 'Estimated Positions');
                 else
                     plot(ax, tgtposAll(1,k), tgtposAll(2,k), 'x', ...
                         'Color', tgtColor, 'LineWidth', 2, 'MarkerSize', 12, ...
-                        'HandleVisibility', 'off');
+                        'Tag', tgtTag, 'HandleVisibility', 'off');
                     plot(ax, tgtposEstAll(1,k), tgtposEstAll(2,k), 'o', ...
                         'Color', tgtColor, 'LineWidth', 2, 'MarkerSize', 12, ...
-                        'HandleVisibility', 'off');
+                        'Tag', tgtTag, 'HandleVisibility', 'off');
                 end
                 plot(ax, [tgtposAll(1,k), tgtposEstAll(1,k)], ...
                          [tgtposAll(2,k), tgtposEstAll(2,k)], ...
-                    '--', 'Color', tgtColor, 'LineWidth', 1, 'HandleVisibility', 'off');
+                    '--', 'Color', tgtColor, 'LineWidth', 1, ...
+                    'Tag', tgtTag, 'HandleVisibility', 'off');
                 % Target number label (offset slightly above the true position)
                 text(ax, tgtposAll(1,k), tgtposAll(2,k), sprintf('  T%d', k), ...
                     'Color', tgtColor, 'FontWeight', 'bold', 'FontSize', 10, ...
-                    'VerticalAlignment', 'bottom');
+                    'Tag', tgtTag, 'VerticalAlignment', 'bottom');
             end
 
             % Trilateration circles (TOA) or hyperbola curves (TDOA)
-            if chkShowCurves.Value
             angles = 0:2*pi/720:2*pi;
             if strcmp(measurementType, 'TOA')
                 curveName = 'Trilateration Circles';
@@ -376,6 +384,7 @@ function positionAccuracy()
             end
             for idxTgt = 1:numTargets
                 tgtColor = tgtColors(idxTgt, :);
+                curveTag = sprintf('Curves_Target%d', idxTgt);
                 if strcmp(measurementType, 'TOA')
                     rngEst = YAll{idxTgt} * cLight;
                     for anchorIdx = 1:numAnchors
@@ -383,11 +392,11 @@ function positionAccuracy()
                         cy = rngEst(anchorIdx) * sin(angles) + anchorpos(2, anchorIdx);
                         if anchorIdx == 1
                             plot(ax, cx, cy, '--', 'Color', tgtColor, 'LineWidth', 1, ...
-                                'Tag', 'TrilatCurves', ...
+                                'Tag', curveTag, ...
                                 'DisplayName', sprintf('%s (Target %d)', curveName, idxTgt));
                         else
                             plot(ax, cx, cy, '--', 'Color', tgtColor, 'LineWidth', 1, ...
-                                'Tag', 'TrilatCurves', ...
+                                'Tag', curveTag, ...
                                 'HandleVisibility', 'off');
                         end
                     end
@@ -401,19 +410,28 @@ function positionAccuracy()
                         if isreal(hx) && isreal(hy)
                             if firstCurveForTgt
                                 plot(ax, hx, hy, '--', 'Color', tgtColor, 'LineWidth', 1, ...
-                                    'Tag', 'TrilatCurves', ...
+                                    'Tag', curveTag, ...
                                     'DisplayName', sprintf('%s (Target %d)', curveName, idxTgt));
                                 firstCurveForTgt = false;
                             else
                                 plot(ax, hx, hy, '--', 'Color', tgtColor, 'LineWidth', 1, ...
-                                    'Tag', 'TrilatCurves', ...
+                                    'Tag', curveTag, ...
                                     'HandleVisibility', 'off');
                             end
                         end
                     end
                 end
             end
-            end % chkShowCurves
+
+            % Refresh per-target checkboxes
+            for k = 1:5
+                if k <= numTargets
+                    chkTargets(k).Value = true;
+                    chkTargets(k).Visible = 'on';
+                else
+                    chkTargets(k).Visible = 'off';
+                end
+            end
 
             legend(ax, 'Location', 'best', 'FontSize', 10);
             title(ax, sprintf('%s Localization (%s) — RMSE: %.4f m', ...
@@ -436,12 +454,12 @@ function positionAccuracy()
         btnRun.Text = 'Run Simulation';
     end
 
-    function toggleCurves()
-        objs = findall(ax, 'Tag', 'TrilatCurves');
+    function toggleTarget(tgtIdx)
+        objs = findall(ax, 'Tag', sprintf('Curves_Target%d', tgtIdx));
         if isempty(objs)
             return;
         end
-        if chkShowCurves.Value
+        if chkTargets(tgtIdx).Value
             set(objs, 'Visible', 'on');
         else
             set(objs, 'Visible', 'off');
