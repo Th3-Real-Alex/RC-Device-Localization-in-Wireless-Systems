@@ -1,4 +1,6 @@
 function positionAccuracy()
+    close all;
+    
     pageContainer = uifigure('Name', 'Device Localization in Wireless Systems - Position Accuracy', ...
         'NumberTitle', 'off', ...
         'Resize', 'off', ...
@@ -131,6 +133,14 @@ function positionAccuracy()
         'Value', '8', ...
         'Position', [leftPad yPos ctrlWidth ctrlHeight]);
 
+    % --- Show Curves Toggle ---
+    yPos = yPos - rowSpacing;
+    chkShowCurves = uicheckbox(controlPanel, ...
+        'Text', 'Show Trilateration Curves', ...
+        'Value', true, ...
+        'Position', [leftPad yPos ctrlWidth ctrlHeight], ...
+        'ValueChangedFcn', @(~,~) toggleCurves());
+
     % --- Run Button ---
     yPos = yPos - rowSpacing - 5;
     btnRun = uibutton(controlPanel, ...
@@ -234,6 +244,7 @@ function positionAccuracy()
                           'TwoWayPropagation', false);
 
             % --- Per-target simulation ---
+            YAll = cell(1, numTargets);
             tgtposEstAll = zeros(3, numTargets);
 
             for idxTgt = 1:numTargets
@@ -307,6 +318,7 @@ function positionAccuracy()
                     [Y, estVar] = estimator(X, freqSpacing, delayoffset);
                     tgtposEstAll(:, idxTgt) = tdoaposest(Y, estVar, anchorpos);
                 end
+                YAll{idxTgt} = Y;
             end
 
             % --- Compute RMSE ---
@@ -324,20 +336,84 @@ function positionAccuracy()
             plot(ax, anchorpos(1,:), anchorpos(2,:), 'b^', ...
                 'LineWidth', 2, 'MarkerSize', 10, 'DisplayName', 'Anchors');
 
-            % True target positions
-            plot(ax, tgtposAll(1,:), tgtposAll(2,:), 'rx', ...
-                'LineWidth', 2, 'MarkerSize', 12, 'DisplayName', 'True Positions');
+            % Per-target colors (shared by markers, connecting lines, and curves)
+            tgtColors = lines(numTargets);
 
-            % Estimated positions
-            plot(ax, tgtposEstAll(1,:), tgtposEstAll(2,:), 'go', ...
-                'LineWidth', 2, 'MarkerSize', 12, 'DisplayName', 'Estimated Positions');
-
-            % Lines connecting true -> estimated
+            % True target positions, estimated positions, connecting lines, labels
             for k = 1:numTargets
+                tgtColor = tgtColors(k, :);
+                if k == 1
+                    plot(ax, tgtposAll(1,k), tgtposAll(2,k), 'x', ...
+                        'Color', tgtColor, 'LineWidth', 2, 'MarkerSize', 12, ...
+                        'DisplayName', 'True Positions');
+                    plot(ax, tgtposEstAll(1,k), tgtposEstAll(2,k), 'o', ...
+                        'Color', tgtColor, 'LineWidth', 2, 'MarkerSize', 12, ...
+                        'DisplayName', 'Estimated Positions');
+                else
+                    plot(ax, tgtposAll(1,k), tgtposAll(2,k), 'x', ...
+                        'Color', tgtColor, 'LineWidth', 2, 'MarkerSize', 12, ...
+                        'HandleVisibility', 'off');
+                    plot(ax, tgtposEstAll(1,k), tgtposEstAll(2,k), 'o', ...
+                        'Color', tgtColor, 'LineWidth', 2, 'MarkerSize', 12, ...
+                        'HandleVisibility', 'off');
+                end
                 plot(ax, [tgtposAll(1,k), tgtposEstAll(1,k)], ...
                          [tgtposAll(2,k), tgtposEstAll(2,k)], ...
-                    'k--', 'LineWidth', 1, 'HandleVisibility', 'off');
+                    '--', 'Color', tgtColor, 'LineWidth', 1, 'HandleVisibility', 'off');
+                % Target number label (offset slightly above the true position)
+                text(ax, tgtposAll(1,k), tgtposAll(2,k), sprintf('  T%d', k), ...
+                    'Color', tgtColor, 'FontWeight', 'bold', 'FontSize', 10, ...
+                    'VerticalAlignment', 'bottom');
             end
+
+            % Trilateration circles (TOA) or hyperbola curves (TDOA)
+            if chkShowCurves.Value
+            angles = 0:2*pi/720:2*pi;
+            if strcmp(measurementType, 'TOA')
+                curveName = 'Trilateration Circles';
+            else
+                curveName = 'Hyperbola Curves';
+            end
+            for idxTgt = 1:numTargets
+                tgtColor = tgtColors(idxTgt, :);
+                if strcmp(measurementType, 'TOA')
+                    rngEst = YAll{idxTgt} * cLight;
+                    for anchorIdx = 1:numAnchors
+                        cx = rngEst(anchorIdx) * cos(angles) + anchorpos(1, anchorIdx);
+                        cy = rngEst(anchorIdx) * sin(angles) + anchorpos(2, anchorIdx);
+                        if anchorIdx == 1
+                            plot(ax, cx, cy, '--', 'Color', tgtColor, 'LineWidth', 1, ...
+                                'Tag', 'TrilatCurves', ...
+                                'DisplayName', sprintf('%s (Target %d)', curveName, idxTgt));
+                        else
+                            plot(ax, cx, cy, '--', 'Color', tgtColor, 'LineWidth', 1, ...
+                                'Tag', 'TrilatCurves', ...
+                                'HandleVisibility', 'off');
+                        end
+                    end
+                else
+                    rngDiffEst = YAll{idxTgt} * cLight;
+                    numAnchorPair = length(rngDiffEst);
+                    firstCurveForTgt = true;
+                    for anchorPairIdx = 1:numAnchorPair
+                        [hx, hy] = get2DHyperbolicSurface( ...
+                            anchorpos(:, 1), anchorpos(:, anchorPairIdx+1), rngDiffEst(anchorPairIdx));
+                        if isreal(hx) && isreal(hy)
+                            if firstCurveForTgt
+                                plot(ax, hx, hy, '--', 'Color', tgtColor, 'LineWidth', 1, ...
+                                    'Tag', 'TrilatCurves', ...
+                                    'DisplayName', sprintf('%s (Target %d)', curveName, idxTgt));
+                                firstCurveForTgt = false;
+                            else
+                                plot(ax, hx, hy, '--', 'Color', tgtColor, 'LineWidth', 1, ...
+                                    'Tag', 'TrilatCurves', ...
+                                    'HandleVisibility', 'off');
+                            end
+                        end
+                    end
+                end
+            end
+            end % chkShowCurves
 
             legend(ax, 'Location', 'best', 'FontSize', 10);
             title(ax, sprintf('%s Localization (%s) — RMSE: %.4f m', ...
@@ -359,4 +435,49 @@ function positionAccuracy()
         btnRun.Enable = 'on';
         btnRun.Text = 'Run Simulation';
     end
+
+    function toggleCurves()
+        objs = findall(ax, 'Tag', 'TrilatCurves');
+        if isempty(objs)
+            return;
+        end
+        if chkShowCurves.Value
+            set(objs, 'Visible', 'on');
+        else
+            set(objs, 'Visible', 'off');
+        end
+    end
+end
+
+function [x, y] = get2DHyperbolicSurface(anchorRefPos, anchorPos, rngDiffEst)
+% Get 2D hyperbolic surface for a given pair of anchors
+theta = linspace(-pi/2, pi/2, 100);
+phi = 0;
+[Theta, Phi] = meshgrid(theta, phi);
+
+D = norm(anchorRefPos - anchorPos) / 2;
+c = rngDiffEst;
+
+xC = -c ./ cos(Theta) ./ 2;
+yC = sqrt(4*D^2 - c^2) .* tan(Theta) .* cos(Phi) ./ 2;
+zC = sqrt(4*D^2 - c^2) .* tan(Theta) .* sin(Phi) ./ 2;
+
+r0 = (anchorPos + anchorRefPos) / 2;
+a = [1; 0; 0];
+b = (anchorPos - anchorRefPos);
+b = b / norm(b);
+v = cross(a, b);
+s = norm(v);
+c = dot(a, b);
+V = [0 -v(3) v(2); v(3) 0 -v(1); -v(2) v(1) 0];
+if abs(s) > 0
+    R = eye(3) + V + V^2 * (1 - c) / s^2;
+else
+    R = eye(3);
+end
+
+x = R(1,1).*xC + R(1,2).*yC + R(1,3).*zC;
+y = R(2,1).*xC + R(2,2).*yC + R(2,3).*zC;
+x = x + r0(1);
+y = y + r0(2);
 end
